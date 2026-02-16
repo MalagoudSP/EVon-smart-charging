@@ -1,14 +1,12 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Zap, MapPin, TrendingUp, Clock } from 'lucide-react'
+import { Zap, MapPin, TrendingUp, Clock, Zap as ZapIcon, TrendingUp as TrendingUpIcon } from 'lucide-react'
 
 export default function Home() {
-  const { data: session } = useSession()
-  const router = useRouter()
+  const [session, setSession] = useState(null)
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-background via-background to-secondary">

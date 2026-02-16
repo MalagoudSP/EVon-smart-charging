@@ -1,12 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { redirect, useParams } from 'next/navigation'
+import { useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -16,7 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Zap, MapPin, DollarSign, Clock, AlertCircle, CheckCircle } from 'lucide-react'
-import { toast } from 'sonner'
 
 interface BookingData {
   stationName: string
@@ -27,13 +24,60 @@ interface BookingData {
   availableChargers: number
 }
 
+const stationDatabase: { [key: string]: BookingData } = {
+  '1': {
+    stationName: 'Downtown Charging Hub',
+    address: '123 Main St, Downtown',
+    chargerType: 'DC Fast',
+    powerRating: 150,
+    pricePerKwh: 0.35,
+    availableChargers: 8,
+  },
+  '2': {
+    stationName: 'Shopping Mall Station',
+    address: '456 Mall Dr',
+    chargerType: 'Level 2',
+    powerRating: 7,
+    pricePerKwh: 0.28,
+    availableChargers: 14,
+  },
+  '3': {
+    stationName: 'Airport Charging Station',
+    address: '789 Airport Rd',
+    chargerType: 'DC Fast',
+    powerRating: 120,
+    pricePerKwh: 0.42,
+    availableChargers: 5,
+  },
+  '4': {
+    stationName: 'Park Street Level 2',
+    address: '321 Park Ave',
+    chargerType: 'Level 2',
+    powerRating: 7,
+    pricePerKwh: 0.25,
+    availableChargers: 8,
+  },
+  '5': {
+    stationName: 'Tech Park DC Fast',
+    address: '999 Tech Ave',
+    chargerType: 'DC Fast',
+    powerRating: 200,
+    pricePerKwh: 0.48,
+    availableChargers: 3,
+  },
+  '6': {
+    stationName: 'Highway Rest Stop',
+    address: 'Mile 45, Interstate 95',
+    chargerType: 'DC Fast',
+    powerRating: 150,
+    pricePerKwh: 0.38,
+    availableChargers: 6,
+  },
+}
+
 export default function BookingPage() {
-  const { data: session, status } = useSession()
   const params = useParams()
   const stationId = params.stationId as string
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [bookingData, setBookingData] = useState<BookingData | null>(null)
   const [bookingSuccess, setBookingSuccess] = useState(false)
   const [chargingParams, setChargingParams] = useState({
     currentSoc: 20,
@@ -46,47 +90,9 @@ export default function BookingPage() {
     cost: 0,
   })
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      redirect('/login')
-    }
-  }, [status])
+  const bookingData = stationDatabase[stationId] || stationDatabase['1']
 
-  // Fetch station details
-  useEffect(() => {
-    const fetchStationData = async () => {
-      setIsLoading(true)
-      try {
-        // Mock data
-        const mockData: BookingData = {
-          stationName: 'Downtown Charging Hub',
-          address: '123 Main St, Downtown',
-          chargerType: 'DC Fast',
-          powerRating: 150,
-          pricePerKwh: 0.35,
-          availableChargers: 8,
-        }
-        setBookingData(mockData)
-
-        // Calculate initial estimates
-        calculateEstimates(mockData, 20, 80, 150)
-      } catch (error) {
-        console.error('Error fetching station:', error)
-        toast.error('Failed to load station details')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchStationData()
-  }, [stationId])
-
-  const calculateEstimates = (
-    data: BookingData,
-    currentSoc: number,
-    targetSoc: number,
-    powerRating: number
-  ) => {
+  const calculateEstimates = (currentSoc: number, targetSoc: number) => {
     // Mock battery capacity (60 kWh for Tesla Model 3)
     const batteryCapacity = 60
 
@@ -95,10 +101,10 @@ export default function BookingPage() {
 
     // Calculate time with charging curve consideration
     const chargingCurve = targetSoc > 80 ? 1 + (targetSoc - 80) * 0.2 : 1
-    const duration = ((energy / powerRating) * 60 * chargingCurve) // in minutes
+    const duration = ((energy / bookingData.powerRating) * 60 * chargingCurve) // in minutes
 
     // Calculate cost
-    const cost = energy * data.pricePerKwh
+    const cost = energy * bookingData.pricePerKwh
 
     setEstimates({
       duration: Math.round(duration),
@@ -113,71 +119,18 @@ export default function BookingPage() {
       [type === 'current' ? 'currentSoc' : 'targetSoc']: value,
     }
     setChargingParams(newParams)
-
-    if (bookingData) {
-      calculateEstimates(
-        bookingData,
-        type === 'current' ? value : newParams.currentSoc,
-        type === 'target' ? value : newParams.targetSoc,
-        bookingData.powerRating
-      )
-    }
+    calculateEstimates(
+      type === 'current' ? value : newParams.currentSoc,
+      type === 'target' ? value : newParams.targetSoc
+    )
   }
 
-  const handleSubmitBooking = async (e: React.FormEvent) => {
+  const handleSubmitBooking = (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-
-    try {
-      // In production, call the FastAPI backend
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          station_id: stationId,
-          current_soc: chargingParams.currentSoc,
-          target_soc: chargingParams.targetSoc,
-          charger_type: chargingParams.chargerType,
-        }),
-      })
-
-      if (response.ok) {
-        setBookingSuccess(true)
-        toast.success('Booking confirmed!')
-        setTimeout(() => {
-          redirect('/dashboard')
-        }, 3000)
-      } else {
-        toast.error('Failed to create booking')
-      }
-    } catch (error) {
-      console.error('Error creating booking:', error)
-      toast.error('Booking error occurred')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  if (status === 'loading' || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Zap className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  if (!bookingData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="p-8 text-center space-y-4">
-          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
-          <h2 className="text-xl font-semibold">Station Not Found</h2>
-          <Link href="/stations">
-            <Button>Back to Stations</Button>
-          </Link>
-        </Card>
-      </div>
-    )
+    setBookingSuccess(true)
+    setTimeout(() => {
+      window.location.href = '/dashboard'
+    }, 3000)
   }
 
   if (bookingSuccess) {
@@ -200,14 +153,15 @@ export default function BookingPage() {
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-secondary">
+      <header className="border-b border-border bg-card">
         <div className="container py-6">
           <Link href="/stations">
             <Button variant="ghost" size="sm" className="mb-4">
               ← Back to Stations
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold">Book Charging Session</h1>
+          <h1 className="text-3xl font-bold">Book Charging Session</h1>
+          <p className="text-muted-foreground mt-2">Set your charging parameters and confirm booking</p>
         </div>
       </header>
 
@@ -319,27 +273,6 @@ export default function BookingPage() {
                     />
                   </div>
 
-                  {/* Charger Type Selection */}
-                  <div className="space-y-2">
-                    <Label htmlFor="charger-type">Charging Speed</Label>
-                    <Select
-                      value={chargingParams.chargerType}
-                      onValueChange={(value) =>
-                        setChargingParams((p) => ({
-                          ...p,
-                          chargerType: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="charger-type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dc-fast">DC Fast (Fastest)</SelectItem>
-                        <SelectItem value="level-2">Level 2 (Standard)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 {/* Terms */}
@@ -361,12 +294,11 @@ export default function BookingPage() {
                   </Link>
                   <Button
                     type="submit"
-                    disabled={isSubmitting}
                     className="flex-1 gap-2"
                     size="lg"
                   >
                     <Zap className="h-5 w-5" />
-                    {isSubmitting ? 'Confirming...' : 'Confirm Booking'}
+                    Confirm Booking
                   </Button>
                 </div>
               </form>

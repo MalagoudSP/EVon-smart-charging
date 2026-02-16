@@ -1,22 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { redirect } from 'next/navigation'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
 import { Card } from '@/components/ui/card'
-import { Zap, MapPin, Clock, DollarSign, Star, Filter, Loader2 } from 'lucide-react'
+import { Zap, MapPin, Star, Filter, TrendingUp, Zap as BoltIcon } from 'lucide-react'
 
 interface Station {
   id: string
@@ -31,14 +19,117 @@ interface Station {
   pricing_per_kwh: number
   availability_status: string
   rating: number
-  distance_km?: number
+  distance_km: number
+  demand: string
+  estimatedChargeTime: number
 }
 
+const mockStations: Station[] = [
+  {
+    id: '1',
+    name: 'Downtown Charging Hub',
+    location_address: '123 Main St, Downtown',
+    latitude: 40.7128,
+    longitude: -74.006,
+    total_chargers: 16,
+    available_chargers: 8,
+    charger_types: 'DC Fast, Level 2',
+    power_rating_kw: 150,
+    pricing_per_kwh: 0.35,
+    availability_status: 'Available',
+    rating: 4.8,
+    distance_km: 2.5,
+    demand: 'High',
+    estimatedChargeTime: 45,
+  },
+  {
+    id: '2',
+    name: 'Shopping Mall Station',
+    location_address: '456 Mall Dr',
+    latitude: 40.758,
+    longitude: -73.9855,
+    total_chargers: 20,
+    available_chargers: 14,
+    charger_types: 'Level 2',
+    power_rating_kw: 7,
+    pricing_per_kwh: 0.28,
+    availability_status: 'Available',
+    rating: 4.5,
+    distance_km: 5.1,
+    demand: 'Medium',
+    estimatedChargeTime: 120,
+  },
+  {
+    id: '3',
+    name: 'Airport Charging Station',
+    location_address: '789 Airport Rd',
+    latitude: 40.6413,
+    longitude: -73.7781,
+    total_chargers: 32,
+    available_chargers: 5,
+    charger_types: 'DC Fast, Level 2',
+    power_rating_kw: 120,
+    pricing_per_kwh: 0.42,
+    availability_status: 'Limited',
+    rating: 4.2,
+    distance_km: 15.2,
+    demand: 'Low',
+    estimatedChargeTime: 50,
+  },
+  {
+    id: '4',
+    name: 'Park Street Level 2',
+    location_address: '321 Park Ave',
+    latitude: 40.7489,
+    longitude: -73.9680,
+    total_chargers: 8,
+    available_chargers: 8,
+    charger_types: 'Level 2',
+    power_rating_kw: 7,
+    pricing_per_kwh: 0.25,
+    availability_status: 'Available',
+    rating: 4.7,
+    distance_km: 3.8,
+    demand: 'Low',
+    estimatedChargeTime: 180,
+  },
+  {
+    id: '5',
+    name: 'Tech Park DC Fast',
+    location_address: '999 Tech Ave',
+    latitude: 40.7614,
+    longitude: -73.9776,
+    total_chargers: 12,
+    available_chargers: 3,
+    charger_types: 'DC Fast',
+    power_rating_kw: 200,
+    pricing_per_kwh: 0.48,
+    availability_status: 'Limited',
+    rating: 4.3,
+    distance_km: 6.2,
+    demand: 'High',
+    estimatedChargeTime: 35,
+  },
+  {
+    id: '6',
+    name: 'Highway Rest Stop',
+    location_address: 'Mile 45, Interstate 95',
+    latitude: 40.7,
+    longitude: -74.0,
+    total_chargers: 10,
+    available_chargers: 6,
+    charger_types: 'DC Fast',
+    power_rating_kw: 150,
+    pricing_per_kwh: 0.38,
+    availability_status: 'Available',
+    rating: 4.4,
+    distance_km: 12.3,
+    demand: 'Medium',
+    estimatedChargeTime: 40,
+  },
+]
+
 export default function StationsPage() {
-  const { data: session, status } = useSession()
-  const [stations, setStations] = useState<Station[]>([])
-  const [filteredStations, setFilteredStations] = useState<Station[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [filters, setFilters] = useState({
     distance: 50,
     minRating: 3,
@@ -47,115 +138,11 @@ export default function StationsPage() {
     sortBy: 'distance',
   })
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      redirect('/login')
-    }
-  }, [status])
-
-  // Fetch stations
-  useEffect(() => {
-    const fetchStations = async () => {
-      setIsLoading(true)
-      try {
-        // Mock data - in production, fetch from backend API
-        const mockStations: Station[] = [
-          {
-            id: '1',
-            name: 'Downtown Charging Hub',
-            location_address: '123 Main St, Downtown',
-            latitude: 40.7128,
-            longitude: -74.006,
-            total_chargers: 16,
-            available_chargers: 8,
-            charger_types: 'DC Fast, Level 2',
-            power_rating_kw: 150,
-            pricing_per_kwh: 0.35,
-            availability_status: 'Available',
-            rating: 4.8,
-            distance_km: 2.5,
-          },
-          {
-            id: '2',
-            name: 'Shopping Mall Station',
-            location_address: '456 Mall Dr',
-            latitude: 40.758,
-            longitude: -73.9855,
-            total_chargers: 20,
-            available_chargers: 14,
-            charger_types: 'Level 2',
-            power_rating_kw: 7,
-            pricing_per_kwh: 0.28,
-            availability_status: 'Available',
-            rating: 4.5,
-            distance_km: 5.1,
-          },
-          {
-            id: '3',
-            name: 'Airport Charging Station',
-            location_address: '789 Airport Rd',
-            latitude: 40.6413,
-            longitude: -73.7781,
-            total_chargers: 32,
-            available_chargers: 5,
-            charger_types: 'DC Fast, Level 2',
-            power_rating_kw: 120,
-            pricing_per_kwh: 0.42,
-            availability_status: 'Limited',
-            rating: 4.2,
-            distance_km: 15.2,
-          },
-          {
-            id: '4',
-            name: 'Park Street Level 2',
-            location_address: '321 Park Ave',
-            latitude: 40.7489,
-            longitude: -73.9680,
-            total_chargers: 8,
-            available_chargers: 8,
-            charger_types: 'Level 2',
-            power_rating_kw: 7,
-            pricing_per_kwh: 0.25,
-            availability_status: 'Available',
-            rating: 4.7,
-            distance_km: 3.8,
-          },
-          {
-            id: '5',
-            name: 'Tech Park DC Fast',
-            location_address: '999 Tech Ave',
-            latitude: 40.7614,
-            longitude: -73.9776,
-            total_chargers: 12,
-            available_chargers: 3,
-            charger_types: 'DC Fast',
-            power_rating_kw: 200,
-            pricing_per_kwh: 0.48,
-            availability_status: 'Limited',
-            rating: 4.3,
-            distance_km: 6.2,
-          },
-        ]
-
-        setStations(mockStations)
-        setFilteredStations(mockStations)
-      } catch (error) {
-        console.error('Error fetching stations:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchStations()
-  }, [])
-
-  // Apply filters
-  useEffect(() => {
-    let filtered = stations
+  const filteredStations = useMemo(() => {
+    let filtered = mockStations
 
     // Distance filter
-    filtered = filtered.filter((s) => s.distance_km! <= filters.distance)
+    filtered = filtered.filter((s) => s.distance_km <= filters.distance)
 
     // Rating filter
     filtered = filtered.filter((s) => s.rating >= filters.minRating)
@@ -174,7 +161,7 @@ export default function StationsPage() {
 
     // Sorting
     filtered.sort((a, b) => {
-      if (filters.sortBy === 'distance') return a.distance_km! - b.distance_km!
+      if (filters.sortBy === 'distance') return a.distance_km - b.distance_km
       if (filters.sortBy === 'price') return a.pricing_per_kwh - b.pricing_per_kwh
       if (filters.sortBy === 'rating') return b.rating - a.rating
       if (filters.sortBy === 'available')
@@ -182,31 +169,28 @@ export default function StationsPage() {
       return 0
     })
 
-    setFilteredStations(filtered)
-  }, [filters, stations])
-
-  if (status === 'loading' || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
+    return filtered
+  }, [filters])
 
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-secondary">
+      <header className="border-b border-border bg-card">
         <div className="container py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Find Charging Stations</h1>
-            </div>
-            <Link href="/dashboard">
-              <Button variant="outline">Dashboard</Button>
+          <div className="flex items-center justify-between mb-4">
+            <Link href="/">
+              <Button variant="ghost" className="gap-2">
+                ← Back to Home
+              </Button>
             </Link>
           </div>
+          <div className="flex items-center gap-2">
+            <Zap className="h-6 w-6 text-primary" />
+            <h1 className="text-3xl font-bold">Find Charging Stations</h1>
+          </div>
+          <p className="text-muted-foreground mt-2">
+            Discover nearby EV charging stations with real-time availability and AI-powered predictions
+          </p>
         </div>
       </header>
 
@@ -214,99 +198,93 @@ export default function StationsPage() {
         <div className="grid gap-8 lg:grid-cols-4">
           {/* Filters Sidebar */}
           <div className="lg:col-span-1">
-            <div className="sticky top-4 rounded-lg border border-border bg-card p-6 space-y-6">
+            <Card className="p-6 space-y-6 sticky top-8">
               <div className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-primary" />
                 <h2 className="font-semibold">Filters</h2>
               </div>
 
               {/* Distance */}
-              <div className="space-y-2">
-                <Label>Distance: {filters.distance}km</Label>
-                <Slider
-                  min={1}
-                  max={100}
-                  step={5}
-                  value={[filters.distance]}
-                  onValueChange={(value) =>
-                    setFilters((p) => ({ ...p, distance: value[0] }))
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Distance: {filters.distance}km</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  step="5"
+                  value={filters.distance}
+                  onChange={(e) =>
+                    setFilters({ ...filters, distance: Number(e.target.value) })
                   }
                   className="w-full"
                 />
               </div>
 
               {/* Min Rating */}
-              <div className="space-y-2">
-                <Label>Minimum Rating: {filters.minRating.toFixed(1)}</Label>
-                <Slider
-                  min={1}
-                  max={5}
-                  step={0.5}
-                  value={[filters.minRating]}
-                  onValueChange={(value) =>
-                    setFilters((p) => ({ ...p, minRating: value[0] }))
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Minimum Rating: {filters.minRating.toFixed(1)}</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  step="0.5"
+                  value={filters.minRating}
+                  onChange={(e) =>
+                    setFilters({ ...filters, minRating: Number(e.target.value) })
                   }
                   className="w-full"
                 />
               </div>
 
               {/* Charger Type */}
-              <div className="space-y-2">
-                <Label htmlFor="charger-type">Charger Type</Label>
-                <Select
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Charger Type</label>
+                <select
                   value={filters.chargerType}
-                  onValueChange={(value) =>
-                    setFilters((p) => ({ ...p, chargerType: value }))
+                  onChange={(e) =>
+                    setFilters({ ...filters, chargerType: e.target.value })
                   }
+                  className="w-full px-3 py-2 rounded border border-border bg-background"
                 >
-                  <SelectTrigger id="charger-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="dc-fast">DC Fast</SelectItem>
-                    <SelectItem value="level-2">Level 2</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="all">All Types</option>
+                  <option value="dc">DC Fast</option>
+                  <option value="level">Level 2</option>
+                </select>
               </div>
 
               {/* Sort By */}
-              <div className="space-y-2">
-                <Label htmlFor="sort-by">Sort By</Label>
-                <Select
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Sort By</label>
+                <select
                   value={filters.sortBy}
-                  onValueChange={(value) =>
-                    setFilters((p) => ({ ...p, sortBy: value }))
+                  onChange={(e) =>
+                    setFilters({ ...filters, sortBy: e.target.value as any })
                   }
+                  className="w-full px-3 py-2 rounded border border-border bg-background"
                 >
-                  <SelectTrigger id="sort-by">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="distance">Distance</SelectItem>
-                    <SelectItem value="price">Price</SelectItem>
-                    <SelectItem value="rating">Rating</SelectItem>
-                    <SelectItem value="available">Available Chargers</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="distance">Distance</option>
+                  <option value="price">Price</option>
+                  <option value="rating">Rating</option>
+                  <option value="available">Available Chargers</option>
+                </select>
               </div>
 
               {/* Available Only */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-2 border-t border-border">
                 <input
                   type="checkbox"
                   id="available-only"
                   checked={filters.availableOnly}
                   onChange={(e) =>
-                    setFilters((p) => ({ ...p, availableOnly: e.target.checked }))
+                    setFilters({ ...filters, availableOnly: e.target.checked })
                   }
-                  className="rounded border-border"
+                  className="rounded"
                 />
-                <Label htmlFor="available-only" className="cursor-pointer">
+                <label htmlFor="available-only" className="text-sm font-medium cursor-pointer">
                   Available Only
-                </Label>
+                </label>
               </div>
-            </div>
+            </Card>
           </div>
 
           {/* Stations List */}
