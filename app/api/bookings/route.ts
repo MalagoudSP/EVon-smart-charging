@@ -1,3 +1,35 @@
+import { NextRequest } from 'next/server'
+import prisma from '@/lib/prisma'
+
+export async function GET() {
+  try {
+    const bookings = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } })
+    return new Response(JSON.stringify(bookings), { headers: { 'Content-Type': 'application/json' } })
+  } catch (err) {
+    return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const created = await prisma.booking.create({
+      data: {
+        stationId: body.stationId,
+        stationName: body.stationName,
+        date: body.date ? new Date(body.date) : undefined,
+        duration: body.duration ?? 0,
+        kWh: body.kWh ?? 0,
+        cost: body.cost ?? 0,
+        status: body.status ?? 'Pending',
+        params: body.params ?? {},
+      },
+    })
+    return new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } })
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Unable to save booking' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+  }
+}
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 

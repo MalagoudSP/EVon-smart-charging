@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Zap, MapPin, Star, Filter, TrendingUp, Zap as BoltIcon } from 'lucide-react'
+import InteractiveMap from '@/components/ui/interactive-map'
 
 interface Station {
   id: string
@@ -24,110 +25,7 @@ interface Station {
   estimatedChargeTime: number
 }
 
-const mockStations: Station[] = [
-  {
-    id: '1',
-    name: 'Downtown Charging Hub',
-    location_address: '123 Main St, Downtown',
-    latitude: 40.7128,
-    longitude: -74.006,
-    total_chargers: 16,
-    available_chargers: 8,
-    charger_types: 'DC Fast, Level 2',
-    power_rating_kw: 150,
-    pricing_per_kwh: 0.35,
-    availability_status: 'Available',
-    rating: 4.8,
-    distance_km: 2.5,
-    demand: 'High',
-    estimatedChargeTime: 45,
-  },
-  {
-    id: '2',
-    name: 'Shopping Mall Station',
-    location_address: '456 Mall Dr',
-    latitude: 40.758,
-    longitude: -73.9855,
-    total_chargers: 20,
-    available_chargers: 14,
-    charger_types: 'Level 2',
-    power_rating_kw: 7,
-    pricing_per_kwh: 0.28,
-    availability_status: 'Available',
-    rating: 4.5,
-    distance_km: 5.1,
-    demand: 'Medium',
-    estimatedChargeTime: 120,
-  },
-  {
-    id: '3',
-    name: 'Airport Charging Station',
-    location_address: '789 Airport Rd',
-    latitude: 40.6413,
-    longitude: -73.7781,
-    total_chargers: 32,
-    available_chargers: 5,
-    charger_types: 'DC Fast, Level 2',
-    power_rating_kw: 120,
-    pricing_per_kwh: 0.42,
-    availability_status: 'Limited',
-    rating: 4.2,
-    distance_km: 15.2,
-    demand: 'Low',
-    estimatedChargeTime: 50,
-  },
-  {
-    id: '4',
-    name: 'Park Street Level 2',
-    location_address: '321 Park Ave',
-    latitude: 40.7489,
-    longitude: -73.9680,
-    total_chargers: 8,
-    available_chargers: 8,
-    charger_types: 'Level 2',
-    power_rating_kw: 7,
-    pricing_per_kwh: 0.25,
-    availability_status: 'Available',
-    rating: 4.7,
-    distance_km: 3.8,
-    demand: 'Low',
-    estimatedChargeTime: 180,
-  },
-  {
-    id: '5',
-    name: 'Tech Park DC Fast',
-    location_address: '999 Tech Ave',
-    latitude: 40.7614,
-    longitude: -73.9776,
-    total_chargers: 12,
-    available_chargers: 3,
-    charger_types: 'DC Fast',
-    power_rating_kw: 200,
-    pricing_per_kwh: 0.48,
-    availability_status: 'Limited',
-    rating: 4.3,
-    distance_km: 6.2,
-    demand: 'High',
-    estimatedChargeTime: 35,
-  },
-  {
-    id: '6',
-    name: 'Highway Rest Stop',
-    location_address: 'Mile 45, Interstate 95',
-    latitude: 40.7,
-    longitude: -74.0,
-    total_chargers: 10,
-    available_chargers: 6,
-    charger_types: 'DC Fast',
-    power_rating_kw: 150,
-    pricing_per_kwh: 0.38,
-    availability_status: 'Available',
-    rating: 4.4,
-    distance_km: 12.3,
-    demand: 'Medium',
-    estimatedChargeTime: 40,
-  },
-]
+const initialStations: Station[] = []
 
 export default function StationsPage() {
   const [filters, setFilters] = useState({
@@ -138,8 +36,55 @@ export default function StationsPage() {
     sortBy: 'distance',
   })
 
+  const [stations, setStations] = useState<Station[]>(initialStations)
+  const [query, setQuery] = useState('')
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/stations')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!mounted) return
+        const mapped: Station[] = data.map((s: any) => ({
+          id: s.stationId,
+          name: s.stationName,
+          location_address: s.address,
+          latitude: s.lat || 0,
+          longitude: s.lng || 0,
+          total_chargers: s.availableChargers || 0,
+          available_chargers: s.availableChargers || 0,
+          charger_types: s.chargerType || 'Unknown',
+          power_rating_kw: s.powerRating || 0,
+          pricing_per_kwh: s.pricePerKwh || 0,
+          availability_status: s.availableChargers > 0 ? 'Available' : 'Unavailable',
+          rating: 4.5,
+          distance_km: 0,
+          demand: 'Unknown',
+          estimatedChargeTime: 0,
+        }))
+        setStations(mapped)
+      } catch (err) {
+        // ignore and keep initial list
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const centerOnMe = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation not available')
+      return
+    }
+    navigator.geolocation.getCurrentPosition((p) => setUserLocation({ lat: p.coords.latitude, lng: p.coords.longitude }), (e) => alert('Unable to get location: ' + e.message))
+  }
+
   const filteredStations = useMemo(() => {
-    let filtered = mockStations
+    let filtered = stations
 
     // Distance filter
     filtered = filtered.filter((s) => s.distance_km <= filters.distance)
@@ -150,6 +95,22 @@ export default function StationsPage() {
     // Available only
     if (filters.availableOnly) {
       filtered = filtered.filter((s) => s.available_chargers > 0)
+    }
+
+    // search
+    if (query.trim()) {
+      const q = query.trim().toLowerCase()
+      filtered = filtered.filter((s) => s.name.toLowerCase().includes(q) || s.location_address.toLowerCase().includes(q))
+    }
+
+    // max price filter
+    if (filters['maxPrice'] !== undefined) {
+      filtered = filtered.filter((s) => s.pricing_per_kwh <= (filters['maxPrice'] ?? 1))
+    }
+
+    // min power filter
+    if (filters['minPower'] !== undefined) {
+      filtered = filtered.filter((s) => s.power_rating_kw >= (filters['minPower'] ?? 0))
     }
 
     // Charger type filter
@@ -284,11 +245,44 @@ export default function StationsPage() {
                   Available Only
                 </label>
               </div>
+
+              <div className="pt-4">
+                <label className="text-sm font-medium">Search</label>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Station name or address"
+                  className="w-full px-3 py-2 rounded border border-border bg-background mt-2"
+                />
+              </div>
             </Card>
           </div>
 
           {/* Stations List */}
           <div className="lg:col-span-3 space-y-4">
+            <Card className="p-4 flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <InteractiveMap
+                  stations={filteredStations.map(s => ({ id: s.id, stationName: s.name, lat: s.latitude, lng: s.longitude, available: s.available_chargers, price: s.pricing_per_kwh }))}
+                  center={filteredStations[0] ? { lat: filteredStations[0].latitude, lng: filteredStations[0].longitude } : undefined}
+                  userLocation={userLocation}
+                  zoom={12}
+                />
+              </div>
+              <div className="w-44">
+                <button onClick={centerOnMe} className="w-full px-3 py-2 rounded bg-primary text-white">Center on me</button>
+                <div className="mt-2">
+                  <label className="text-sm">Max Price ($/kWh)</label>
+                  <input type="range" min="0" max="1" step="0.01" value={filters['maxPrice'] ?? 1} onChange={(e) => setFilters({ ...filters, maxPrice: Number(e.target.value) })} className="w-full" />
+                  <div className="text-xs text-muted-foreground">{(filters['maxPrice'] ?? 1).toFixed(2)} $/kWh</div>
+                </div>
+                <div className="mt-2">
+                  <label className="text-sm">Min Power (kW)</label>
+                  <input type="range" min="0" max="300" step="5" value={filters['minPower'] ?? 0} onChange={(e) => setFilters({ ...filters, minPower: Number(e.target.value) })} className="w-full" />
+                  <div className="text-xs text-muted-foreground">{filters['minPower'] ?? 0} kW</div>
+                </div>
+              </div>
+            </Card>
             <p className="text-sm text-muted-foreground">
               Found {filteredStations.length} charging stations
             </p>

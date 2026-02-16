@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Booking {
+  id          String   @id @default(cuid())
+  stationId   String
+  stationName String
+  date        DateTime @default(now())
+  duration    Int
+  kWh         Float
+  cost        Float
+  status      String
+  params      Json?
+  createdAt   DateTime @default(now())
+}
+
+model Station {
+  id               String  @id @default(cuid())
+  stationId        String  @unique
+  stationName      String
+  address          String
+  chargerType      String
+  powerRating      Int
+  pricePerKwh      Float
+  availableChargers Int
+  lat              Float?
+  lng              Float?
+  createdAt        DateTime @default(now())
+}

@@ -1,3 +1,14 @@
+import { NextRequest } from 'next/server'
+import prisma from '@/lib/prisma'
+
+export async function GET() {
+  try {
+    const stations = await prisma.station.findMany({ orderBy: { stationName: 'asc' } })
+    return new Response(JSON.stringify(stations), { headers: { 'Content-Type': 'application/json' } })
+  } catch (err) {
+    return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } })
+  }
+}
 import { NextRequest, NextResponse } from 'next/server'
 
 interface Station {

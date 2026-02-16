@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "node prisma/seed.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -51,7 +54,10 @@
     "react": "19.2.3",
     "react-day-picker": "8.10.1",
     "react-dom": "19.2.3",
+    "@react-google-maps/api": "^2.16.1",
+    "@googlemaps/markerclusterer": "^2.0.9",
     "react-hook-form": "^7.54.1",
+    "@prisma/client": "^5.12.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "sonner": "^1.7.1",
@@ -62,6 +68,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "prisma": "^5.12.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^22",
     "@types/react": "19.2.7",

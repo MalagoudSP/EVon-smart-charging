@@ -57,35 +57,7 @@ const chargingDistribution = [
 
 const COLORS = ['hsl(210 100% 50%)', 'hsl(39 100% 50%)', '#8884d8']
 
-const bookings = [
-  {
-    id: '1',
-    stationName: 'Downtown Charging Hub',
-    date: '2024-02-15 14:00',
-    duration: 45,
-    cost: 12.5,
-    status: 'Completed',
-    kWh: 18.5,
-  },
-  {
-    id: '2',
-    stationName: 'Shopping Mall Station',
-    date: '2024-02-16 09:00',
-    duration: 30,
-    cost: 7.8,
-    status: 'In Progress',
-    kWh: 12.3,
-  },
-  {
-    id: '3',
-    stationName: 'Park Street Level 2',
-    date: '2024-02-17 18:00',
-    duration: 60,
-    cost: 10.2,
-    status: 'Pending',
-    kWh: 14.7,
-  },
-]
+import React, { useEffect, useState } from 'react'
 
 const mlModels = [
   { name: 'Demand Prediction', model: 'LSTM', accuracy: 92, description: 'Forecasts station demand 24 hours ahead' },
@@ -95,6 +67,24 @@ const mlModels = [
 ]
 
 export default function DashboardPage() {
+  const [bookingsState, setBookingsState] = useState<any[]>([])
+
+  const fetchBookings = async () => {
+    try {
+      const res = await fetch('/api/bookings')
+      if (!res.ok) return
+      const data = await res.json()
+      setBookingsState(data)
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    fetchBookings()
+    const iv = setInterval(fetchBookings, 15000)
+    return () => clearInterval(iv)
+  }, [])
 
   return (
     <main className="min-h-screen bg-background">
@@ -311,10 +301,10 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((booking) => (
+                {bookingsState.map((booking) => (
                   <tr key={booking.id} className="border-b border-border hover:bg-secondary transition-colors">
                     <td className="py-3 text-foreground font-medium">{booking.stationName}</td>
-                    <td className="py-3 text-muted-foreground">{booking.date}</td>
+                    <td className="py-3 text-muted-foreground">{new Date(booking.date).toLocaleString()}</td>
                     <td className="py-3 text-muted-foreground">{booking.duration} min</td>
                     <td className="py-3 text-foreground font-medium">{booking.kWh}</td>
                     <td className="py-3 text-accent font-semibold">${booking.cost}</td>
