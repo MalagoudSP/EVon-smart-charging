@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +11,6 @@ import { toast } from 'sonner'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -23,26 +21,16 @@ export default function LoginPage() {
     setIsLoading(true)
     setError('')
 
-    try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
-
-      if (result?.error) {
-        setError(result.error)
-        toast.error('Invalid email or password')
-      } else if (result?.ok) {
-        toast.success('Logged in successfully')
-        router.push(searchParams.get('callbackUrl') || '/dashboard')
-      }
-    } catch (error) {
-      setError('An error occurred. Please try again.')
-      toast.error('Login failed')
-    } finally {
-      setIsLoading(false)
+    // Demo authentication - for production use backend auth
+    if (email === 'demo@example.com' && password === 'demo1234') {
+      toast.success('Logged in successfully')
+      localStorage.setItem('user', JSON.stringify({ email }))
+      router.push('/dashboard')
+    } else {
+      setError('Invalid email or password')
+      toast.error('Invalid credentials')
     }
+    setIsLoading(false)
   }
 
   return (
