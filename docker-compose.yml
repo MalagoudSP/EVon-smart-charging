@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: evon-postgres
+    environment:
+      POSTGRES_DB: evon_db
+      POSTGRES_USER: evon_user
+      POSTGRES_PASSWORD: evon_password_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./scripts/seed-data.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    networks:
+      - evon-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evon_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: evon-backend
+    environment:
+      DATABASE_URL: postgresql://evon_user:evon_password_dev@postgres:5432/evon_db
+      SECRET_KEY: your-secret-key-change-in-production
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - evon-network
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: evon-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: your-random-secret-key-change-in-production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./app:/app/app
+      - ./components:/app/components
+      - ./public:/app/public
+    networks:
+      - evon-network
+    command: pnpm dev
+
+volumes:
+  postgres_data:
+
+networks:
+  evon-network:
+    driver: bridge
