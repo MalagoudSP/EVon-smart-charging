@@ -7,29 +7,168 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-model Booking {
-  id          String   @id @default(cuid())
-  stationId   String
-  stationName String
-  date        DateTime @default(now())
-  duration    Int
-  kWh         Float
-  cost        Float
-  status      String
-  params      Json?
-  createdAt   DateTime @default(now())
+model User {
+  id                      String   @id @default(cuid())
+  email                   String   @unique
+  passwordHash            String
+  firstName               String?
+  lastName                String?
+  phoneNumber             String?
+  vehicleType             String?
+  batteryCapacityKwh      Float?
+  preferredChargingSpeed  String?
+  homeLocation            String?
+  workLocation            String?
+  averageRating           Float   @default(0)
+  totalRatings            Int     @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  isActive                Boolean @default(true)
+  bookings                Booking[]
+  reviews                 Review[]
+  payments                Payment[]
+  notifications           Notification[]
 }
 
 model Station {
-  id               String  @id @default(cuid())
-  stationId        String  @unique
-  stationName      String
-  address          String
-  chargerType      String
-  powerRating      Int
-  pricePerKwh      Float
-  availableChargers Int
-  lat              Float?
-  lng              Float?
-  createdAt        DateTime @default(now())
+  id                    String   @id @default(cuid())
+  stationId             String   @unique
+  stationName           String
+  address               String
+  lat                   Float
+  lng                   Float
+  chargerTypes          String   // JSON: {level1: number, level2: number, dc_fast: number}
+  totalChargers         Int
+  availableChargers     Int
+  powerRatingKw         Float
+  pricePerKwh           Float
+  dynamicPrice          Float?   // ML-driven dynamic pricing
+  accessType            String   // public, private, partner
+  amenities             String?  // JSON: parking, wifi, restroom, etc
+  openingHours          String?  // HH:MM-HH:MM format
+  providerName          String?
+  averageRating         Float   @default(0)
+  reviewCount           Int     @default(0)
+  waitingTimeMinutes    Int     @default(0)
+  peakHours             String?  // JSON: hours when demand is high
+  demandLevel           String   @default("low") // low, medium, high
+  realTimeAvailability  Int     @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  bookings              Booking[]
+  reviews               Review[]
+  predictions           DemandPrediction[]
+  analytics             StationAnalytics[]
+  priceHistory          PriceHistory[]
+}
+
+model Booking {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stationId             String
+  station               Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  bookingDate           DateTime
+  startTime             DateTime
+  endTime               DateTime
+  durationMinutes       Int
+  chargerType           String
+  energyKwh             Float
+  baseCost              Float
+  dynamicPriceApplied   Float?   // Adjusted cost based on demand
+  finalCost             Float
+  paymentStatus         String   @default("pending") // pending, completed, failed, refunded
+  bookingStatus         String   @default("active") // active, completed, cancelled, no-show
+  cancellationReason    String?
+  ratingId              String?
+  review                Review?  @relation(fields: [ratingId], references: [id])
+  estimatedChargeTime   Int?     // ML prediction
+  actualChargeTime      Int?
+  mlPredictionAccuracy  Float?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Review {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stationId             String
+  station               Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  rating                Int      // 1-5 stars
+  comment               String?
+  cleanliness           Int?     // 1-5
+  chargerFunctionality  Int?     // 1-5
+  waitingTime           Int?     // minutes
+  chargingExperience    Int?     // 1-5
+  bookings              Booking[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model DemandPrediction {
+  id                    String   @id @default(cuid())
+  stationId             String
+  station               Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  predictedDemand       Float    // percentage/score
+  timeSlot              String   // HH:MM format
+  dayOfWeek             Int      // 0-6 (Sunday-Saturday)
+  predictedWaitTime     Int?     // minutes
+  confidenceScore       Float    // 0-1
+  mlModelVersion        String
+  createdAt             DateTime @default(now())
+  @@index([stationId, timeSlot])
+}
+
+model StationAnalytics {
+  id                    String   @id @default(cuid())
+  stationId             String
+  station               Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  date                  DateTime
+  totalBookings         Int      @default(0)
+  totalEnergyDispenedKwh Float   @default(0)
+  totalRevenueUsd       Float    @default(0)
+  averageOccupancy      Float    @default(0)
+  peakHourDemand        Float    @default(0)
+  offPeakDemand         Float    @default(0)
+  automationMetrics     String?  // JSON: efficiency scores
+  createdAt             DateTime @default(now())
+  @@unique([stationId, date])
+}
+
+model PriceHistory {
+  id                    String   @id @default(cuid())
+  stationId             String
+  station               Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  basePrice             Float
+  dynamicPrice          Float
+  demandLevel           String
+  timestamp             DateTime @default(now())
+  reasonForAdjustment   String?  // high_demand, low_availability, peak_hours, etc
+}
+
+model Payment {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingId             String
+  amount                Float
+  paymentMethod         String   // credit_card, debit_card, digital_wallet
+  transactionId         String?
+  status                String   // pending, completed, failed, refunded
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Notification {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                  String   // booking_confirmation, price_alert, availability_alert, etc
+  title                 String
+  message               String
+  data                  String?  // JSON: additional context
+  isRead                Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  @@index([userId, isRead])
 }
