@@ -21,14 +21,34 @@ export default function LoginPage() {
     setIsLoading(true)
     setError('')
 
-    // Demo authentication - for production use backend auth
-    if (email === 'demo@example.com' && password === 'demo1234') {
+    try {
+      const response = await fetch(
+        'http://localhost:8000/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json()
+        setError(error.detail || 'Invalid email or password')
+        toast.error('Invalid credentials')
+        setIsLoading(false)
+        return
+      }
+
+      const data = await response.json()
+      localStorage.setItem('token', data.access_token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      
       toast.success('Logged in successfully')
-      localStorage.setItem('user', JSON.stringify({ email }))
       router.push('/dashboard')
-    } else {
-      setError('Invalid email or password')
-      toast.error('Invalid credentials')
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('Failed to login. Make sure the backend is running.')
+      toast.error('Login failed')
     }
     setIsLoading(false)
   }
@@ -110,12 +130,11 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Demo Info */}
+        {/* Backend Info */}
         <div className="rounded-lg border border-border bg-secondary/50 p-4 space-y-2">
-          <p className="text-sm font-semibold text-foreground">Demo Credentials</p>
+          <p className="text-sm font-semibold text-foreground">⚠️ Important</p>
           <p className="text-xs text-muted-foreground">
-            Email: demo@example.com<br />
-            Password: demo1234
+            Make sure the backend server is running on <strong>http://localhost:8000</strong> before logging in.
           </p>
         </div>
       </div>

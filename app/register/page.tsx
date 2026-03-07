@@ -64,12 +64,44 @@ export default function RegisterPage() {
       return
     }
 
-    // Demo registration - for production use backend auth
-    setSuccess(true)
-    toast.success('Account created successfully!')
-    setTimeout(() => {
-      router.push('/login')
-    }, 2000)
+    try {
+      const response = await fetch(
+        'http://localhost:8000/api/auth/register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            vehicle_type: formData.vehicleType || null,
+            battery_capacity_kwh: formData.batteryCapacity ? parseFloat(formData.batteryCapacity) : null,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json()
+        setError(error.detail || 'Registration failed')
+        setIsLoading(false)
+        return
+      }
+
+      const data = await response.json()
+      localStorage.setItem('token', data.access_token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      
+      setSuccess(true)
+      toast.success('Account created successfully!')
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 2000)
+    } catch (err) {
+      console.error('Registration error:', err)
+      setError('Failed to create account. Please try again.')
+      toast.error('Registration failed')
+    }
     setIsLoading(false)
   }
 
