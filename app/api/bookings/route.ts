@@ -1,37 +1,9 @@
-import { NextRequest } from 'next/server'
-import prisma from '@/lib/prisma'
-
-export async function GET() {
-  try {
-    const bookings = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } })
-    return new Response(JSON.stringify(bookings), { headers: { 'Content-Type': 'application/json' } })
-  } catch (err) {
-    return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } })
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const created = await prisma.booking.create({
-      data: {
-        stationId: body.stationId,
-        stationName: body.stationName,
-        date: body.date ? new Date(body.date) : undefined,
-        duration: body.duration ?? 0,
-        kWh: body.kWh ?? 0,
-        cost: body.cost ?? 0,
-        status: body.status ?? 'Pending',
-        params: body.params ?? {},
-      },
-    })
-    return new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } })
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Unable to save booking' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
-  }
-}
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
+import prisma from '@/lib/prisma'
+import { successResponse, errorResponse, validateRequest, asyncHandler, checkRateLimit } from '@/lib/api-middleware'
+import { requireAuth } from '@/lib/auth-utils'
+import { createBookingSchema, updateBookingSchema } from '@/lib/validation-schemas'
+
 
 interface BookingRequest {
   station_id: string
@@ -59,106 +31,163 @@ interface Booking {
 // Mock bookings storage
 const bookings: Map<string, Booking> = new Map()
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = await getServerSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+/**
+ * GET /api/bookings - Fetch user's bookings
+ * Requires authentication, rate limited to 100 requests/minute
+ */
+export const GET = asyncHandler(async (request: NextRequest) => {
+  // Rate limiting check
+  const rateLimitError = checkRateLimit(request)
+  if (rateLimitError) return rateLimitError
 
+  // Authentication check
+  const { session, error: authError } = await requireAuth(request)
+  if (authError) return authError
+
+  try {
     const userBookings = Array.from(bookings.values()).filter(
-      b => b.user_id === session.user?.email
+      (b) => b.user_id === session.user?.email
     )
 
-    return NextResponse.json(userBookings, { status: 200 })
+    return successResponse(userBookings, 200)
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch bookings' },
-      { status: 500 }
+    console.error('Error fetching bookings:', error)
+    return errorResponse(
+      'Failed to fetch bookings',
+      'FETCH_BOOKINGS_ERROR',
+      500
     )
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+/**
+ * POST /api/bookings - Create new booking
+ * Requires authentication, validates input against schema
+ */
+export const POST = asyncHandler(async (request: NextRequest) => {
+  // Rate limiting check
+  const rateLimitError = checkRateLimit(request, 50) // Stricter limit for creation
+  if (rateLimitError) return rateLimitError
+
+  // Authentication check
+  const { session, error: authError } = await requireAuth(request)
+  if (authError) return authError
+
+  // Validate request body
+  const { data: validatedData, error: validationError } = await validateRequest(
+    request,
+    createBookingSchema
+  )
+  if (validationError) return validationError
+
   try {
-    const session = await getServerSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // Verify station exists in database
+    const station = await prisma.station.findUnique({
+      where: { stationId: validatedData.stationId },
+    })
 
-    const body: BookingRequest = await request.json()
-
-    // Validate input
-    if (!body.station_id || !body.start_time || !body.duration_minutes) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
+    if (!station) {
+      return errorResponse(
+        'Station not found',
+        'STATION_NOT_FOUND',
+        404
       )
     }
 
-    // Calculate estimated cost
-    const pricePerKwh = 0.35 // Mock price
-    const estimatedChargingKwh = 20 // Mock estimate
-    const estimatedCost = pricePerKwh * estimatedChargingKwh
-
+    // Create booking with validated data
     const booking: Booking = {
-      id: `BK_${Date.now()}`,
+      id: `BK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       user_id: session.user?.email || 'unknown',
-      station_id: body.station_id,
+      station_id: validatedData.stationId,
       status: 'pending',
-      start_time: body.start_time,
+      start_time: validatedData.date || new Date().toISOString(),
       end_time: new Date(
-        new Date(body.start_time).getTime() + body.duration_minutes * 60000
+        new Date(validatedData.date || Date.now()).getTime() +
+          ((validatedData.duration ?? 60) * 60000)
       ).toISOString(),
-      duration_minutes: body.duration_minutes,
-      estimated_cost: estimatedCost,
-      charger_type: body.charger_type,
+      duration_minutes: validatedData.duration || 60,
+      estimated_cost: validatedData.cost || station.pricePerKwh * (validatedData.kWh || 20),
+      charger_type: 2,
       charging_progress: 0,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     }
 
     bookings.set(booking.id, booking)
 
-    return NextResponse.json(booking, { status: 201 })
+    return successResponse(booking, 201)
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to create booking' },
-      { status: 500 }
+    console.error('Error creating booking:', error)
+    return errorResponse(
+      'Failed to create booking',
+      'CREATE_BOOKING_ERROR',
+      500
     )
   }
-}
+})
 
+/**
+ * PUT /api/bookings - Update booking
+ * Requires authentication, owner validation, schema validation
+ */
 export async function PUT(request: NextRequest) {
-  try {
-    const session = await getServerSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  // Rate limiting check
+  const rateLimitError = checkRateLimit(request, 50)
+  if (rateLimitError) return rateLimitError
 
+  // Authentication check
+  const { session, error: authError } = await requireAuth(request)
+  if (authError) return authError
+
+  try {
     const body = await request.json()
     const { id, status, charging_progress } = body
 
+    // Validate input
+    if (!id) {
+      return errorResponse('Booking ID is required', 'MISSING_ID', 400)
+    }
+
     const booking = bookings.get(id)
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      return errorResponse('Booking not found', 'BOOKING_NOT_FOUND', 404)
     }
 
+    // Check ownership
     if (booking.user_id !== session.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      return errorResponse(
+        'Unauthorized: You can only update your own bookings',
+        'UNAUTHORIZED',
+        403
+      )
     }
 
+    // Validate status enum
+    if (
+      status &&
+      !['pending', 'active', 'completed', 'cancelled'].includes(status)
+    ) {
+      return errorResponse(
+        'Invalid status value',
+        'INVALID_STATUS',
+        400
+      )
+    }
+
+    // Update booking
     if (status) booking.status = status
-    if (typeof charging_progress === 'number') {
+    if (typeof charging_progress === 'number' && charging_progress >= 0 && charging_progress <= 100) {
       booking.charging_progress = charging_progress
     }
 
     bookings.set(id, booking)
 
-    return NextResponse.json(booking, { status: 200 })
+    return successResponse(booking, 200)
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to update booking' },
-      { status: 500 }
+    console.error('Error updating booking:', error)
+    return errorResponse(
+      'Failed to update booking',
+      'UPDATE_BOOKING_ERROR',
+      500
     )
   }
 }

@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { successResponse, errorResponse, validateRequest, asyncHandler, checkRateLimit } from '@/lib/api-middleware'
+import { registerSchema } from '@/lib/validation-schemas'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
+/**
+ * POST /api/auth/register - Register new user
+ * Validates input with strict password requirements
+ * Rate limited to 10 requests/minute for security
+ */
+export const POST = asyncHandler(async (request: NextRequest) => {
+  // Strict rate limiting for registration (prevent brute force)
+  const rateLimitError = checkRateLimit(request, 10, 60 * 1000)
+  if (rateLimitError) return rateLimitError
 
+  // Validate request body against schema
+  const { data: validatedData, error: validationError } = await validateRequest(
+    request,
+    registerSchema
+  )
+  if (validationError) return validationError
+
+  try {
     // Call FastAPI backend to register user
     const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: 'POST',
@@ -13,30 +29,42 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: body.email,
-        password: body.password,
-        first_name: body.first_name,
-        last_name: body.last_name,
-        vehicle_type: body.vehicle_type,
-        battery_capacity_kwh: body.battery_capacity_kwh,
+        email: validatedData.email,
+        password: validatedData.password,
+        first_name: validatedData.first_name,
+        last_name: validatedData.last_name,
+        vehicle_type: validatedData.vehicle_type,
+        battery_capacity_kwh: validatedData.battery_capacity_kwh,
       }),
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      return NextResponse.json(
-        { detail: error.detail || 'Registration failed' },
-        { status: response.status }
+      let error_message = 'Registration failed'
+      let error_code = 'REGISTRATION_ERROR'
+
+      try {
+        const error = await response.json()
+        error_message = error.detail || error.message || error_message
+        error_code = error.code || error_code
+      } catch {
+        // Use default error messages
+      }
+
+      return errorResponse(
+        error_message,
+        error_code,
+        response.status || 500
       )
     }
 
     const data = await response.json()
-    return NextResponse.json(data, { status: 200 })
+    return successResponse(data, 201)
   } catch (error) {
     console.error('Registration error:', error)
-    return NextResponse.json(
-      { detail: 'An error occurred during registration' },
-      { status: 500 }
+    return errorResponse(
+      'An error occurred during registration',
+      'REGISTRATION_ERROR',
+      500
     )
   }
-}
+})
